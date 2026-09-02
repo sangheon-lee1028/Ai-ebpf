@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# 벤치마크 결과 (실험별로 생성되는 데이터)
+4-ai-experiment/results/
+metrics.csv
+
+# 가상 모델 바이너리 (실행 시 자동 생성)
+*.bin
+*.gguf
+
+# eBPF 빌드 아티팩트
+*.o
+*.d
+*.skel.h
+3-source-code/v0.01/src/libbpf-bootstrap/kprobe
+3-source-code/v0.01/src/libbpf-bootstrap/kshield
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
