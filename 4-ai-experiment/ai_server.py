@@ -113,8 +113,9 @@ _INJECTION_PATTERNS: list = [
 ]
 
 # 속도 제한: IP당 10초 창에 최대 20 요청
-RATE_LIMIT_WINDOW = 10
-RATE_LIMIT_MAX    = 20
+RATE_LIMIT_WINDOW   = 10
+RATE_LIMIT_MAX      = 20
+RATE_LIMIT_ENABLED  = True   # --no-ratelimit 으로 비활성화 가능
 
 logging.basicConfig(
     level=logging.INFO,
@@ -189,6 +190,8 @@ _rate_lock  = threading.Lock()
 
 
 def check_rate_limit(ip: str) -> bool:
+    if not RATE_LIMIT_ENABLED:
+        return True
     now = time.time()
     with _rate_lock:
         _rate_store[ip] = [t for t in _rate_store[ip] if now - t < RATE_LIMIT_WINDOW]
@@ -341,20 +344,28 @@ class AIServerHandler(BaseHTTPRequestHandler):
 
 
 # ── 진입점 ────────────────────────────────────────────────────────
-L7_DEFENSE_ENABLED = True
+L7_DEFENSE_ENABLED  = True
+RATE_LIMIT_ENABLED  = True  # noqa: F811
 
 def main():
-    global _model_handle, MODEL_PATH, L7_DEFENSE_ENABLED
+    global _model_handle, MODEL_PATH, L7_DEFENSE_ENABLED, RATE_LIMIT_ENABLED
 
     parser = argparse.ArgumentParser(description="AI 추론 서버 (논문 실험)")
-    parser.add_argument("--model",  default=DEFAULT_MODEL_PATH, help="모델 파일 경로")
-    parser.add_argument("--port",   type=int, default=SERVER_PORT, help="서버 포트 (기본: 8080)")
-    parser.add_argument("--no-l7",  action="store_true", help="L7 방어 비활성화 (Group 2 실험용)")
+    parser.add_argument("--model",         default=DEFAULT_MODEL_PATH, help="모델 파일 경로")
+    parser.add_argument("--port",          type=int, default=SERVER_PORT, help="서버 포트 (기본: 8080)")
+    parser.add_argument("--no-l7",         action="store_true", help="L7 방어 비활성화 (Group 2 실험용)")
+    parser.add_argument("--no-ratelimit",  action="store_true", help="레이트 리밋 비활성화 (벤치마크 전용)")
     args = parser.parse_args()
-    MODEL_PATH = args.model
+    MODEL_PATH         = args.model
     L7_DEFENSE_ENABLED = not args.no_l7
+    RATE_LIMIT_ENABLED = not args.no_ratelimit
 
-    group = "Group 2: eBPF-only" if args.no_l7 else "Group 1/3: L7 Application-Layer Defense"
+    if args.no_l7:
+        group = "Group 2: eBPF-only"
+    elif args.no_ratelimit:
+        group = "Group 1/3: L7 Defense (benchmark mode, no rate-limit)"
+    else:
+        group = "Group 1/3: L7 Application-Layer Defense"
     print("=" * 65)
     print(f"  AI Inference Server  —  {group}")
     print("=" * 65)
