@@ -117,7 +117,7 @@ void handle_event(void* ctx, int cpu, void* data, __u32 data_sz)
 		int i;
 		for(i = 0; i < MAX_SECURITY_FILE_ID; i++)
 		{
-			if(info.security_file == ETC_PASSWD)
+			if(info.security_file == i)
 			{
 				strncpy(&fname[0], skel->rodata->security_files[i], MAX_CACHED_PATH_SIZE);
 				break;
