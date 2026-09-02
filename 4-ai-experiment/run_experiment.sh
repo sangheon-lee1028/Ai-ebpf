@@ -34,6 +34,7 @@ ATTACK_COUNT=30          # 공격 스크립트 반복 횟수
 BENCH_COUNT=500          # 벤치마크 반복 횟수
 KSHIELD_EVENT=2          # eBPF 이벤트 번호 (2 = EVIL_OPEN)
 SKIP_EBPF=false
+NO_L7=false
 
 RESULTS_DIR="${SCRIPT_DIR}/results"
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
@@ -60,6 +61,7 @@ log_section() { echo -e "\n${BOLD}━━━  $*  ━━━${RESET}"; }
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --skip-ebpf)    SKIP_EBPF=true; shift ;;
+        --no-l7)        NO_L7=true; shift ;;
         --attack-count) ATTACK_COUNT="$2"; shift 2 ;;
         --bench-count)  BENCH_COUNT="$2"; shift 2 ;;
         --model)        MODEL_PATH="$2"; shift 2 ;;
@@ -119,7 +121,9 @@ log_ok "사전 조건 확인 완료"
 # ── STEP 1: AI 서버 구동 ─────────────────────────────────────────────
 log_section "STEP 1 / AI 추론 서버 구동"
 
-python3 "${AI_SERVER}" --model "${MODEL_PATH}" --port "${SERVER_PORT}" \
+L7_FLAG=""
+[[ "${NO_L7}" == "true" ]] && L7_FLAG="--no-l7"
+python3 "${AI_SERVER}" --model "${MODEL_PATH}" --port "${SERVER_PORT}" ${L7_FLAG} \
     > "${LOG_SERVER}" 2>&1 &
 SERVER_PID=$!
 log_info "AI 서버 시작 (PID ${SERVER_PID})  로그: ${LOG_SERVER}"

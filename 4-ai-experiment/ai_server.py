@@ -207,6 +207,9 @@ def l7_keyword_filter(text: str):
       1. llm-guard PromptInjection ML 스캐너 (설치된 경우)
       2. 정규식 6-카테고리 Heuristic (fallback)
     """
+    if not L7_DEFENSE_ENABLED:
+        return True, ""
+
     if len(text) > 1000:
         return False, "프롬프트 최대 길이 초과 (1000자)"
 
@@ -338,19 +341,24 @@ class AIServerHandler(BaseHTTPRequestHandler):
 
 
 # ── 진입점 ────────────────────────────────────────────────────────
-def main():
-    global _model_handle, MODEL_PATH
+L7_DEFENSE_ENABLED = True
 
-    parser = argparse.ArgumentParser(description="AI 추론 서버 (논문 실험 Group 1)")
-    parser.add_argument("--model", default=DEFAULT_MODEL_PATH, help="모델 파일 경로")
-    parser.add_argument("--port",  type=int, default=SERVER_PORT, help="서버 포트 (기본: 8080)")
+def main():
+    global _model_handle, MODEL_PATH, L7_DEFENSE_ENABLED
+
+    parser = argparse.ArgumentParser(description="AI 추론 서버 (논문 실험)")
+    parser.add_argument("--model",  default=DEFAULT_MODEL_PATH, help="모델 파일 경로")
+    parser.add_argument("--port",   type=int, default=SERVER_PORT, help="서버 포트 (기본: 8080)")
+    parser.add_argument("--no-l7",  action="store_true", help="L7 방어 비활성화 (Group 2 실험용)")
     args = parser.parse_args()
     MODEL_PATH = args.model
+    L7_DEFENSE_ENABLED = not args.no_l7
 
+    group = "Group 2: eBPF-only" if args.no_l7 else "Group 1/3: L7 Application-Layer Defense"
     print("=" * 65)
-    print("  AI Inference Server  —  Group 1: L7 Application-Layer Defense")
+    print(f"  AI Inference Server  —  {group}")
     print("=" * 65)
-    log.info(f"L7 방어 모드: {DEFENSE_MODE}")
+    log.info(f"L7 방어: {'비활성화 (--no-l7)' if args.no_l7 else DEFENSE_MODE}")
 
     create_mock_model(MODEL_PATH)
     _model_handle = load_model(MODEL_PATH)
