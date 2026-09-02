@@ -158,24 +158,24 @@ def run_repeated(args):
 
 # ── 비교(t-test) 모드 ──────────────────────────────────────────────────────
 def load_stats_csv(path):
-    group, runs = "", 0
-    mean_t, std_t, mean_l, std_l = 0, 0, 0, 0
     per_run_t, per_run_l = [], []
     with open(path, newline="", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        summary = next(reader)
-        group  = summary["group"]
-        runs   = int(float(summary["runs"]))
-        mean_t = float(summary["throughput_mean"])
-        std_t  = float(summary["throughput_std"])
-        mean_l = float(summary["latency_mean"])
-        std_l  = float(summary["latency_std"])
+        reader = csv.reader(f)
+        header = next(reader)
+        summary_row = next(reader)
+        d = dict(zip(header, summary_row))
+        group  = d["group"]
+        runs   = int(float(d["runs"]))
+        mean_t = float(d["throughput_mean"])
+        std_t  = float(d["throughput_std"])
+        mean_l = float(d["latency_mean"])
+        std_l  = float(d["latency_std"])
         next(reader)  # 빈 줄
         next(reader)  # 헤더 (run, throughput_rps, latency_mean_ms)
         for row in reader:
-            if row.get("throughput_rps"):
-                per_run_t.append(float(row["throughput_rps"]))
-                per_run_l.append(float(row["latency_mean_ms"]))
+            if len(row) >= 3 and row[0]:
+                per_run_t.append(float(row[1]))
+                per_run_l.append(float(row[2]))
     return group, runs, mean_t, std_t, mean_l, std_l, per_run_t, per_run_l
 
 
