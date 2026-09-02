@@ -174,12 +174,12 @@ python3 "${ATTACK_SCRIPT}" --phase 2 --count 5 \
 log_info "Phase 3: 직접 파일 반복 읽기"
 python3 "${ATTACK_SCRIPT}" --phase 3 --count "${ATTACK_COUNT}" \
     --server "http://${SERVER_HOST}:${SERVER_PORT}" \
-    --model "${MODEL_PATH}" --no-server 2>&1 | tee -a "${LOG_ATTACK}"
+    --model "${MODEL_PATH}" --no-server 2>&1 | tee -a "${LOG_ATTACK}" || true
 
 log_info "Phase 4: 고속 open() 연속 호출 (EVIL_OPEN 탐지 유도)"
 python3 "${ATTACK_SCRIPT}" --phase 4 --count "${ATTACK_COUNT}" \
     --server "http://${SERVER_HOST}:${SERVER_PORT}" \
-    --model "${MODEL_PATH}" --no-server 2>&1 | tee -a "${LOG_ATTACK}"
+    --model "${MODEL_PATH}" --no-server 2>&1 | tee -a "${LOG_ATTACK}" || true
 
 log_ok "공격 시뮬레이션 완료  로그: ${LOG_ATTACK}"
 
