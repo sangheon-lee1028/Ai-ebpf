@@ -8,7 +8,7 @@ lsh66404865@gmail.com
 
 ## 요약
 
-대규모 언어 모델(LLM) 서비스가 확산됨에 따라 AI 추론 서버를 대상으로 한 보안 위협이 증가하고 있다. 기존 L7 애플리케이션 계층 방어는 HTTP 요청 필터링에 집중하여 커널 수준의 직접적인 파일 접근 공격에 취약하다는 한계를 지닌다. 본 논문은 eBPF(extended Berkeley Packet Filter)를 활용한 커널 수준 AI 모델 보안 프레임워크 kShield를 제안한다. kShield는 kprobe를 통해 `do_sys_openat2` 시스템 콜을 추적하고, AI 모델 파일에 대한 비정상적인 반복 접근을 탐지하여 악성 프로세스에 SIGKILL을 전송한다. llm-guard 기반 L7 방어(Group 1), kShield eBPF 단독(Group 2), 통합 시스템(Group 3)의 세 비교군을 구성하여 Ubuntu 22.04 VM 환경에서 실험하였다. 공격 시뮬레이션 결과 Group 1은 L7 필터 우회 후 최대 4,000 KB의 모델 데이터가 유출된 반면, Group 2와 Group 3은 80 KB 탈취 시점에 즉시 프로세스를 차단하였다. 10회 반복 측정 및 Welch's t-test 분석 결과 kShield eBPF 단독(Group 2)은 L7 단독(Group 1) 대비 통계적으로 유의미하게 높은 처리량을 보였으며(p=0.0192), L7+eBPF 통합(Group 3)은 L7 단독과 성능 차이가 없었다(p=0.3933). 정상 추론 워크로드 중 EVIL_OPEN 이벤트는 발생하지 않아 kShield가 정상 서비스를 간섭하지 않음을 확인하였다.
+대규모 언어 모델(LLM) 서비스가 확산됨에 따라 AI 추론 서버를 대상으로 한 보안 위협이 증가하고 있다. 기존 L7 애플리케이션 계층 방어는 HTTP 요청 필터링에 집중하여 커널 수준의 직접적인 파일 접근 공격에 취약하다는 한계를 지닌다. 본 논문은 eBPF(extended Berkeley Packet Filter)를 활용한 커널 수준 AI 모델 보안 프레임워크 kShield를 제안한다. kShield는 kprobe를 통해 `do_sys_openat2` 시스템 콜을 추적하고, AI 모델 파일에 대한 비정상적인 반복 접근을 탐지하여 악성 프로세스에 SIGKILL을 전송한다. llm-guard 기반 L7 방어(Group 1), kShield eBPF 단독(Group 2), 통합 시스템(Group 3)의 세 비교군을 구성하여 Ubuntu 22.04 VM 환경에서 실험하였다. 공격 시뮬레이션 결과 Group 1은 L7 필터 우회 후 최대 4,000 KB의 모델 데이터가 유출된 반면, Group 2와 Group 3은 80 KB 탈취 시점에 즉시 프로세스를 차단하였다. 10회 반복 측정 및 Welch's t-test 분석 결과 kShield eBPF 단독(Group 2)은 L7 단독(Group 1) 대비 통계적으로 유의미하게 높은 처리량을 보였으며(p=0.0192), L7+eBPF 통합(Group 3)은 L7 단독 대비 유의미한 성능 저하가 관측되지 않았다(p=0.3933). 정상 추론 워크로드 중 EVIL_OPEN 이벤트는 발생하지 않아 kShield가 정상 서비스를 간섭하지 않음을 확인하였다.
 
 **핵심어:** eBPF, kprobe, AI 모델 보안, 커널 수준 보안, kShield, LLM 보안
 
@@ -62,7 +62,7 @@ Falco, Tetragon, Tracee가 범용 시스템 이벤트 모니터링에 초점을 
 
 ### 3.2 시스템 아키텍처
 
-kShield는 libbpf-bootstrap 프레임워크 기반으로 구현되었으며, 그림 1과 같이 커널 공간 BPF 프로그램과 사용자 공간 제어 데몬으로 구성된다.
+kShield는 libbpf-bootstrap 프레임워크 기반으로 구현되었으며, 그림 1과 같이 커널 공간 BPF 프로그램과 사용자 공간 제어 데몬으로 구성된다. 전체 구현 코드는 공개 저장소 [16]에서 확인할 수 있다.
 
 ```
 ┌─────────────────────────────────────────────┐
@@ -95,6 +95,8 @@ kShield의 핵심은 EVIL_OPEN 이벤트 탐지이다. `do_sys_openat2` 진입 �
 보안 파일 목록은 `/opt/models/model.bin` 등 AI 모델 파일 경로로 구성되며, BPF rodata 섹션에 컴파일 타임에 삽입된다. 이는 보호 대상 파일 경로가 변경될 경우 BPF 프로그램을 재컴파일해야 함을 의미하며, 런타임 경로 설정을 지원하지 않는 구현 한계가 있다.
 
 단, kShield는 `do_sys_openat2`만 후킹하므로 공격자가 파일을 한 번 `open()`한 후 `mmap()`으로 메모리에 매핑하거나 이미 열린 fd로 `read()`를 반복하는 경우에는 `open_cnt`가 증가하지 않아 탐지가 불가능하다. 이는 현재 구현의 핵심 한계이며, LSM(Linux Security Modules) 훅 또는 `mmap` 시스템 콜 kprobe 추가를 통해 보완 가능하다.
+
+또한 SIGKILL 전송은 즉각적이고 복구 불가능한 프로세스 종료를 의미하므로, 오탐 발생 시 정상 서비스 프로세스가 중단될 위험이 있다. 실 운용 환경에서는 즉시 차단(kill mode) 대신 경고(alert mode)를 먼저 활성화하여 오탐률을 사전 검증한 후 차단 모드로 전환하는 단계적 배포 전략이 권장된다.
 
 임계값 EVIL_OPEN_CNT=20은 4.6절 bpftrace 측정 결과에 기반한다. 정상 AI 추론 서버는 모델 파일을 서버 초기화 시 1회만 열고 이후 추론 과정에서는 추가로 열지 않는다. 따라서 임계값 20은 정상 동작 기준(1회) 대비 20배의 안전 여유(safety margin)를 확보하면서, 공격자가 의미 있는 모델 데이터를 탈취하기 위해 반복적으로 파일을 열어야 하는 시나리오를 포착한다.
 
@@ -154,19 +156,21 @@ Group 1은 L7 필터를 우회한 Phase 2 이후 직접 파일 접근이 가능�
 
 탈취량 80 KB의 실질적 위험성을 평가하면, 4 GB 모델 파일 대비 약 0.002%에 불과하다. 현대 LLM은 수십억~수천억 개의 파라미터로 구성되며, 4-bit 양자화 기준으로 80 KB는 약 160,000개 파라미터에 해당한다. 이 분량으로는 모델의 전체 구조를 재구성하기 어려워 실질적인 지적 재산 침해로 이어질 가능성은 낮다. 단, 이 평가는 희소 파일 기반 실험에 한정되므로 실제 GGUF/GGML 형식 모델에서의 위험성 분석은 향후 연구 과제로 남긴다.
 
+**실험 한계**: 공격 탐지 실험(Phase 1–4)은 각 비교군당 1회 수행한 결과이다. 성능 벤치마크(N=10 반복)와 달리 공격 시뮬레이션은 반복 검증을 수행하지 않았으며, 탈취량(4,000 KB, 80 KB)의 재현성은 향후 다회 실험으로 확인할 필요가 있다.
+
 **주의**: Group 2(eBPF 단독)는 설계상 L7 방어를 포함하지 않으므로 Phase 1/2의 프롬프트 인젝션 및 취약 엔드포인트 공격을 차단하지 않는다. 이는 의도된 실험 구성으로, eBPF 단독의 파일 시스템 수준 방어 능력을 순수 측정하기 위한 것이다. 실 운용 환경에서는 Group 3(L7+eBPF 통합) 구성이 권장된다.
 
 ### 4.5 성능 오버헤드 분석 (반복 측정 및 통계 검증)
 
-단일 측정의 우연성을 배제하기 위해 각 비교군별로 동일 조건에서 10회 반복 벤치마크(요청 500회/런)를 수행하고, Welch's t-test를 통해 군 간 차이의 통계적 유의성을 검증하였다.
+단일 측정의 우연성을 배제하기 위해 각 비교군별로 동일 조건에서 10회 반복 벤치마크(요청 500회/런)를 수행하고, Welch's t-test를 통해 군 간 차이의 통계적 유의성을 검증하였다. 벤치마크는 자체 제작한 Python 스크립트(`benchmark.py`, 구현 코드 [16])를 사용하여 `/api/predict` 엔드포인트에 순차적 POST 요청 500회를 전송하는 방식으로 수행하였다.
 
 **[표 1] 비교군별 성능 측정 결과 (N=10, 평균±표준편차)**
 
-| 비교군 | 처리량 (req/s) | 지연시간 (ms) |
-|--------|--------------|-------------|
-| Group 1 (L7 단독) | 674.70 ± 7.02 | 1.416 ± 0.013 |
-| Group 2 (eBPF 단독) | 703.30 ± 31.61 | 1.361 ± 0.064 |
-| Group 3 (L7+eBPF 통합) | 683.39 ± 29.97 | 1.400 ± 0.059 |
+| 비교군 | 처리량 (req/s) | 평균 지연 (ms) | P99 지연 (ms) |
+|--------|--------------|-------------|-------------|
+| Group 1 (L7 단독) | 674.70 ± 7.02 | 1.416 ± 0.013 | 1.665 |
+| Group 2 (eBPF 단독) | 703.30 ± 31.61 | 1.361 ± 0.064 | 1.692 |
+| Group 3 (L7+eBPF 통합) | 683.39 ± 29.97 | 1.400 ± 0.059 | 1.694 |
 
 **[표 2] Welch's t-test 결과**
 
@@ -177,6 +181,8 @@ Group 1은 L7 필터를 우회한 Phase 2 이후 직접 파일 접근이 가능�
 | Group 2 vs Group 3 | +1.446 | 0.1655 | ns |
 
 *기준: \*p<0.05, \*\*p<0.01, \*\*\*p<0.001, ns=유의하지 않음*
+
+P99 꼬리 지연은 Group 1 1.665 ms, Group 2 1.692 ms, Group 3 1.694 ms로 세 비교군 간 차이가 0.03 ms 이내로 일치하였다. 이는 kShield eBPF 훅이 정상 워크로드에서 간헐적 지연 스파이크를 유발하지 않음을 보여주는 추가적 근거이다.
 
 kShield eBPF 단독(Group 2: 703.30±31.61 req/s)은 L7 방어 단독(Group 1: 674.70±7.02 req/s) 대비 통계적으로 유의미하게 높은 처리량을 보였다(p=0.0192). 이 결과는 eBPF 방어가 없는 Group 1보다 eBPF가 있는 Group 2의 처리량이 더 높다는 점에서 직관에 반하는 것처럼 보인다. 이는 Group 1의 처리량 저하가 eBPF 오버헤드가 아닌 L7 필터링(llm-guard 추론) 자체의 오버헤드에서 비롯된 것으로 해석된다. 즉, eBPF kprobe의 O(1) 파일명 비교는 Python 기반 DeBERTa-v3 추론보다 훨씬 가벼우며, 이는 커널 수준 eBPF 모니터링이 애플리케이션 계층 L7 필터링보다 낮은 오버헤드를 가짐을 시사한다. L7+eBPF 통합(Group 3: 683.39±29.97 req/s)과 L7 단독(Group 1) 간 Welch's t-test에서 유의미한 성능 저하는 확인되지 않았다(p=0.3933). 단, p>0.05는 "차이가 없음"을 증명하는 것이 아니라 "차이를 기각하지 못한 것"임을 유의해야 한다. 완전한 동등성 주장을 위해서는 동등성 검정(TOST; Two One-Sided Tests)이 추가적으로 요구되며, 이는 향후 연구 과제로 남긴다. 그러나 현재 N=10 조건에서 eBPF 추가로 인한 유의미한 성능 저하가 관측되지 않았다는 점은, kShield가 기존 L7 방어 인프라에 부담 없이 병행 적용 가능함을 보여주는 실용적 근거로 삼을 수 있다.
 
@@ -202,7 +208,7 @@ kShield kprobe 훅의 실제 발동 빈도를 정량화하기 위해 bpftrace를
 
 ## 5. 결론 및 향후 연구
 
-본 논문은 eBPF kprobe를 활용하여 AI 모델 파일에 대한 비정상적인 반복 접근을 탐지·차단하는 커널 수준 보안 프레임워크 kShield를 제안하였다. 실험 결과 기존 L7 방어 단독 구성(Group 1)은 직접 파일 접근 공격에 취약하여 4,000 KB의 모델 데이터가 탈취된 반면, kShield를 포함한 구성(Group 2, 3)은 탈취를 80 KB로 제한하였다. 10회 반복 측정과 Welch's t-test를 통해 kShield eBPF 단독이 L7 단독 대비 성능상 우위를 가지며(p=0.0192), 통합 시스템은 L7 단독과 성능 차이가 없음을 검증하였다(p=0.3933). bpftrace 측정 결과 정상 추론 워크로드 500회에서 EVIL_OPEN 이벤트가 발생하지 않아 kShield가 정상 서비스에 영향을 주지 않음을 확인하였다.
+본 논문은 eBPF kprobe를 활용하여 AI 모델 파일에 대한 비정상적인 반복 접근을 탐지·차단하는 커널 수준 보안 프레임워크 kShield를 제안하였다. 실험 결과 기존 L7 방어 단독 구성(Group 1)은 직접 파일 접근 공격에 취약하여 4,000 KB의 모델 데이터가 탈취된 반면, kShield를 포함한 구성(Group 2, 3)은 탈취를 80 KB로 제한하였다. 10회 반복 측정과 Welch's t-test를 통해 kShield eBPF 단독이 L7 단독 대비 성능상 우위를 가지며(p=0.0192), 통합 시스템은 L7 단독 대비 유의미한 성능 저하가 관측되지 않았다(p=0.3933). bpftrace 측정 결과 정상 추론 워크로드 500회에서 EVIL_OPEN 이벤트가 발생하지 않아 kShield가 정상 서비스에 영향을 주지 않음을 확인하였다.
 
 향후 연구 과제는 다음과 같다.
 - **공격 회피 시나리오 대응**: 19회 이하 반복 접근을 여러 프로세스에 분산하는 우회 공격에 대한 크로스-프로세스 집계 탐지 메커니즘 연구
@@ -234,4 +240,5 @@ kShield kprobe 훅의 실제 발동 빈도를 정량화하기 위해 bpftrace를
 [12] MITRE, "MITRE ATLAS: Adversarial Threat Landscape for AI Systems," MITRE Corporation, 2023. [Online]. Available: https://atlas.mitre.org  
 [13] Isovalent, "Tetragon: eBPF-based Security Observability and Runtime Enforcement," GitHub, 2023. [Online]. Available: https://github.com/cilium/tetragon  
 [14] Aqua Security, "Tracee: Linux Runtime Security and Forensics using eBPF," GitHub, 2024. [Online]. Available: https://github.com/aquasecurity/tracee  
-[15] C. Wright, C. Cowan, S. Smalley, J. Morris, and G. Kroah-Hartman, "Linux Security Modules: General Security Support for the Linux Kernel," in Proc. USENIX Security Symposium, 2002, pp. 17–31.
+[15] C. Wright, C. Cowan, S. Smalley, J. Morris, and G. Kroah-Hartman, "Linux Security Modules: General Security Support for the Linux Kernel," in Proc. USENIX Security Symposium, 2002, pp. 17–31.  
+[16] 이상헌, "kShield: eBPF 기반 AI 모델 보안 프레임워크 구현 코드," GitHub, 2025. [Online]. Available: https://github.com/sangheon-lee1028/Ai-ebpf
